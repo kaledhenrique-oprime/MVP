@@ -73,6 +73,14 @@ async function route(req,res){
       return send(res,200,{consultants:data.consultants.slice().sort((a,b)=>minutes(a.startTime)-minutes(b.startTime)),currentConsultant:current,activeShift:current?openShift(data,current.id):null,activeShifts:data.consultants.filter(c=>openShift(data,c.id)).map(c=>c.id),totals:{allMessages:data.messages.length,todayMessages:data.messages.filter(m=>m.date===today()).length}});
     }
 
+    if(pathname==="/api/admin/reset-database"&&method==="POST"){
+      const b=await parseBody(req);
+      if(!isAdmin(b.adminId)||!hasActiveShift(data,b.adminId))return send(res,403,{error:"Acesso administrativo negado."});
+      const preservedConsultants=data.consultants.length;
+      data.messages=[];data.activities=[];data.shifts=[];data.cancellationPendings=[];data.crmRecords=[];
+      save(data);return send(res,200,{ok:true,preservedConsultants});
+    }
+
     if(pathname==="/api/crm"&&method==="GET")return send(res,200,data.crmRecords.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))||String(b.createdAt).localeCompare(String(a.createdAt))));
     if(pathname==="/api/crm"&&method==="POST"){
       const b=await parseBody(req);let normalized;try{normalized=normalizeCrmPayload(b,data);}catch(error){return send(res,400,{error:error.message});}
