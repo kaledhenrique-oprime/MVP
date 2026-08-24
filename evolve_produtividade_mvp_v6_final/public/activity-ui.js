@@ -34,7 +34,7 @@
   function renderChargeCard(me){
     const rows=CHARGE_TYPES.map(([type,label])=>{
       const count=activityCount(type,me);
-      return `<div class="charge-row">
+      return `<div class="charge-row charge-${type}">
         <span class="charge-label">${label}</span>
         ${compactCounter(type,count)}
       </div>`;
@@ -92,16 +92,21 @@
   window.renderActivities=function(){
     const me=state.sessionStats||state.stats?.rows?.find(x=>x.id===state.consultant.id);
     const pending=hasCancellationPending();
-    const cards=[
+    const primary=[
       regularCard("mensagens","Mensagens",me,pending),
-      regularCard("matriculas","Matrículas",me,pending),
-      renderChargeCard(me),
       regularCard("agendamentos","Agendamentos de treino",me,pending),
+      regularCard("visitas","Visitas recebidas",me,pending)
+    ].join("");
+    const secondary=[
+      regularCard("matriculas","Matrículas",me,pending),
       regularCard("nps","NPS",me,pending),
-      finishCard(),
-      regularCard("visitas","Visitas recebidas",me,pending),
       regularCard("cancelamentos","Cancelamentos",me,pending)
     ].join("");
-    document.getElementById("activityButtons").innerHTML=`<div class="activity-cards-grid">${cards}</div>${activityChart(me)}`;
+    const special=[renderChargeCard(me),finishCard()].join("");
+    document.getElementById("activityButtons").innerHTML=`<div class="activity-cards-grid">
+      <div class="activity-card-column" data-activity-column="primary">${primary}</div>
+      <div class="activity-card-column" data-activity-column="secondary">${secondary}</div>
+      <div class="activity-card-column" data-activity-column="special">${special}</div>
+    </div>${activityChart(me)}`;
   };
 })();
