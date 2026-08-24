@@ -65,12 +65,12 @@
 
   function activityChart(me){
     const metrics=[
-      {label:"Mensagens",value:activityCount("mensagens",me),color:"#10b981"},
-      {label:"Vendas",value:activityCount("matriculas",me),color:"#22c55e"},
+      {label:"Mensagens",value:activityCount("mensagens",me),color:"#2563eb"},
+      {label:"Vendas",value:activityCount("matriculas",me),color:"#7c3aed"},
       {label:"Cancelamentos",value:activityCount("cancelamentos",me),color:"#f97316"},
-      {label:"Inadimplentes",value:activityCount("inadimplentes",me),color:"#f6c453"},
-      {label:"Cobranças manuais",value:activityCount("manuais",me),color:"#f59e0b"},
-      {label:"Cobranças efetivadas",value:activityCount("efetivadas",me),color:"#e8790b"},
+      {label:"Inadimplentes",value:activityCount("inadimplentes",me),color:"#718096"},
+      {label:"Cobranças manuais",value:activityCount("manuais",me),color:"#34a853"},
+      {label:"Cobranças efetivadas",value:activityCount("efetivadas",me),color:"#0f7a4a"},
       {label:"Treinos",value:activityCount("agendamentos",me),color:"#3b82f6"},
       {label:"Visitas",value:activityCount("visitas",me),color:"#8b5cf6"},
       {label:"NPS",value:activityCount("nps",me),color:"#a855f7"}
