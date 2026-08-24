@@ -50,9 +50,15 @@
 
   function finishCard(){
     return `<div class="finish-grid-card">
+      <button id="shiftTimer" class="time-card shift-time" onclick="toggleShiftTimer()" title="Clique para alternar a visualização">
+        <span class="time-icon">◷</span><span><small id="shiftTimerLabel">Tempo restante</small><strong id="shiftTimerValue">06:00:00</strong></span>
+      </button>
+      <div class="break-time-wrap">
+        <button id="breakButton" class="time-card break-time" onclick="startBreak()"><span class="time-icon">☕</span><span><small>Intervalo obrigatório</small><strong>Iniciar 15 minutos</strong></span></button>
+        <button id="breakFinishButton" class="break-finish hidden" onclick="requestFinishBreak()">Finalizar contagem</button>
+      </div>
       <button class="finish-grid-btn" onclick="finishShift()">
-        <span class="finish-grid-icon">✓</span>
-        <span><strong>Finalizar expediente</strong><small class="activity-description">Salvar relatório no histórico.</small></span>
+        <span class="finish-grid-icon">✓</span><strong>Finalizar expediente</strong>
       </button>
     </div>`;
   }

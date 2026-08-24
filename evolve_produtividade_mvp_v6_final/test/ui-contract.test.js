@@ -159,6 +159,20 @@ test('os cartões renderizados exibem descrições curtas e úteis', () => {
   assert.match(markup, />Finalizar expediente</);
 });
 
+test('os timers ficam empilhados no quarto cartão da segunda linha', () => {
+  const markup = renderActivityMarkup();
+  const actionCard = markup.match(/<div class="finish-grid-card[\s\S]*?<\/div>\s*<\/div>$/)?.[0] || markup;
+  assert.match(actionCard, /id="shiftTimer"/);
+  assert.match(actionCard, /id="breakButton"/);
+  assert.match(actionCard, /id="breakFinishButton"/);
+  assert.ok(actionCard.indexOf('id="shiftTimer"') < actionCard.indexOf('id="breakButton"'));
+  assert.ok(actionCard.indexOf('id="breakButton"') < actionCard.indexOf('Finalizar expediente'));
+
+  const profile = html.match(/<section class="profile-card">([\s\S]*?)<\/section>/)?.[1] || '';
+  assert.doesNotMatch(profile, /id="shiftTimer"|id="breakButton"/);
+  assert.match(profile, /aria-label="Abrir configurações"/);
+});
+
 test('os cartões têm controles próximos e conteúdo com espaço seguro', () => {
   const stylesheet = fs.readFileSync(path.join(projectRoot, 'public/activity-ui.css'), 'utf8');
   const counter = cssRule(stylesheet, '.compact-counter');
@@ -205,4 +219,12 @@ test('a tabela usa Treino e não força rolagem horizontal', () => {
   assert.equal(table.width, '100%');
   assert.equal(table['table-layout'], 'fixed');
   assert.ok(!table['min-width'] || Number.parseFloat(table['min-width']) === 0);
+
+  const activityStyles = fs.readFileSync(path.join(projectRoot, 'public/activity-ui.css'), 'utf8');
+  const metricNumber = cssRule(activityStyles, '.team-card .metric-number');
+  const consultantTotal = cssRule(stylesheet, '.consultant-total');
+  const totalRow = cssRule(stylesheet, '.total-row td');
+  assert.ok(Number.parseFloat(metricNumber['font-size']) >= 17);
+  assert.ok(Number.parseFloat(consultantTotal['font-size']) >= 18);
+  assert.ok(Number.parseFloat(totalRow['font-size']) >= 16);
 });

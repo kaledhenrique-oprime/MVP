@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const vm = require('node:vm');
+const { businessDate, isShiftCurrent } = require('../business-date');
 
 const projectRoot = path.resolve(__dirname, '..');
 let server;
@@ -126,18 +127,94 @@ after(() => {
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
-test('o timer de seis horas alterna entre tempo decorrido e restante', () => {
+test('a jornada de seis horas usa sempre o horário configurado, e não a sessão', () => {
   const context = appContext();
   const result = JSON.parse(vm.runInContext(`JSON.stringify(computeShiftTimer(
-    '2026-08-24T08:00:00.000Z',
-    new Date('2026-08-24T10:15:30.000Z').getTime()
+    '08:00',
+    new Date(2026, 7, 24, 10, 15, 30).getTime()
   ))`, context));
   assert.deepEqual(result, {
+    phase: 'active',
+    startsInMs: 0,
     elapsedMs: 8130000,
     remainingMs: 13470000,
     finished: false
   });
   assert.equal(vm.runInContext("formatDuration(13470000)", context), '03:44:30');
+});
+
+test('antes do horário configurado a jornada aguarda o início exato', () => {
+  const context = appContext();
+  const result = JSON.parse(vm.runInContext(`JSON.stringify(computeShiftTimer(
+    '05:00',
+    new Date(2026, 7, 24, 4, 30, 0).getTime()
+  ))`, context));
+  assert.deepEqual(result, {
+    phase: 'before',
+    startsInMs: 1800000,
+    elapsedMs: 0,
+    remainingMs: 21600000,
+    finished: false
+  });
+});
+
+test('finalizar ou reiniciar sessões não altera o relógio da jornada configurada', () => {
+  const context = appContext();
+  const expression = `JSON.stringify(computeShiftTimer('05:00', new Date(2026, 7, 24, 8, 0, 0).getTime()))`;
+  vm.runInContext("state.shift={id:'primeira',startedAt:'2026-08-24T07:30:00.000Z'}", context);
+  const beforeFinish = vm.runInContext(expression, context);
+  vm.runInContext("state.shift={id:'segunda',startedAt:'2026-08-24T08:00:00.000Z'}", context);
+  const afterRestart = vm.runInContext(expression, context);
+  assert.equal(afterRestart, beforeFinish);
+  assert.deepEqual(JSON.parse(afterRestart), {
+    phase: 'active', startsInMs: 0, elapsedMs: 10800000, remainingMs: 10800000, finished: false
+  });
+});
+
+test('depois das seis horas a jornada configurada permanece concluída', () => {
+  const context = appContext();
+  const result = JSON.parse(vm.runInContext(`JSON.stringify(computeShiftTimer(
+    '05:00',
+    new Date(2026, 7, 24, 12, 0, 0).getTime()
+  ))`, context));
+  assert.deepEqual(result, {
+    phase: 'finished', startsInMs: 0, elapsedMs: 21600000, remainingMs: 0, finished: true
+  });
+});
+
+test('uma jornada noturna continua ativa depois da meia-noite', () => {
+  const context = appContext();
+  const result = JSON.parse(vm.runInContext(`JSON.stringify(computeShiftTimer(
+    '22:00',
+    new Date(2026, 7, 25, 1, 0, 0).getTime()
+  ))`, context));
+  assert.deepEqual(result, {
+    phase: 'active', startsInMs: 0, elapsedMs: 10800000, remainingMs: 10800000, finished: false
+  });
+});
+
+test('a data de negócio do servidor segue o horário de São Paulo', () => {
+  assert.equal(businessDate('2026-08-25T00:30:00.000Z'), '2026-08-24');
+  assert.equal(businessDate('2026-08-25T03:30:00.000Z'), '2026-08-25');
+});
+
+test('o backend mantém a sessão noturna até o fim configurado', () => {
+  const shift = { date: '2026-08-24', endedAt: null };
+  assert.equal(isShiftCurrent(shift, '22:00', '2026-08-25T03:59:59-03:00'), true);
+  assert.equal(isShiftCurrent(shift, '22:00', '2026-08-25T04:00:00-03:00'), false);
+  assert.equal(isShiftCurrent(shift, '08:00', '2026-08-25T01:00:00-03:00'), false);
+});
+
+test('apagar dados do dia deixa o servidor escolher a data local correta', async () => {
+  const context = appContext();
+  let payload;
+  context.fetch = async (_url, options = {}) => {
+    if (options.body) payload = JSON.parse(options.body);
+    return { ok: true, json: async () => options.body ? ({ ok: true }) : ({ consultants: [], activeShifts: [] }) };
+  };
+  vm.runInContext("state.consultant={id:'c1'}; state.shift={id:'s1'}", context);
+  await vm.runInContext('deleteMyDay()', context);
+  assert.deepEqual(payload, { requesterId: 'c1' });
 });
 
 test('o intervalo usa uma contagem independente de quinze minutos', () => {
@@ -235,6 +312,26 @@ test('o histórico é agrupado por data sem misturar relatórios', () => {
   ]);
 });
 
+test('expediente aberto só aparece ativo na data de hoje', () => {
+  const context = appContext();
+  const today = JSON.parse(vm.runInContext("JSON.stringify(historyShiftStatus({date:'2026-08-24',endedAt:null},'2026-08-24'))", context));
+  const old = JSON.parse(vm.runInContext("JSON.stringify(historyShiftStatus({date:'2026-08-21',endedAt:null},'2026-08-24'))", context));
+  assert.deepEqual(today, { className: 'open', label: 'Ativo', note: 'Este expediente ainda está em andamento.' });
+  assert.deepEqual(old, { className: 'unfinished', label: 'Expediente não finalizado', note: 'Este expediente não foi finalizado nesse dia.' });
+});
+
+test('o histórico mantém ativa a jornada noturna reconhecida pelo servidor', () => {
+  const context = appContext();
+  const status = JSON.parse(vm.runInContext("JSON.stringify(historyShiftStatus({date:'2026-08-24',endedAt:null,isCurrent:true},'2026-08-25'))", context));
+  assert.deepEqual(status, { className: 'open', label: 'Ativo', note: 'Este expediente ainda está em andamento.' });
+});
+
+test('o calendário do histórico separa o dia do mês sem texto intermediário', () => {
+  const context = appContext();
+  const parts = JSON.parse(vm.runInContext("JSON.stringify(historyDateParts('2026-08-24'))", context));
+  assert.deepEqual(parts, { day: '24', month: 'AGO' });
+});
+
 test('expedientes antigos do mesmo dia são reconstruídos por faixa de horário', async () => {
   const history = await request('/api/history');
   const first = history.find(item => item.id === 'legacy-s1');
@@ -310,10 +407,7 @@ test('apagar a jornada atual devolve o usuário à seleção de perfis', () => {
   assert.equal(context.__storage.has('evolve-break-c1-s1'), false);
 });
 
-test('a interface inclui os dois timers e integra a administração às configurações', () => {
-  assert.match(html, /id="shiftTimer"/);
-  assert.match(html, /id="breakButton"/);
-  assert.match(html, /id="breakFinishButton"/);
+test('a interface integra a administração às configurações', () => {
   assert.match(html, /id="breakDecisionModal"/);
   assert.match(html, /Reiniciar contagem/);
   assert.match(html, /Intervalo tirado/);
@@ -331,6 +425,7 @@ test('o cartão de Kalled recebe tratamento visual permanente de administrador',
   assert.match(markup, /Administrador/);
 
   const css = fs.readFileSync(path.join(projectRoot, 'public/style.css'), 'utf8');
-  assert.match(css, /\.consultant-btn\.is-admin::before/);
+  assert.doesNotMatch(css, /\.consultant-btn\.is-admin::before/);
+  assert.doesNotMatch(css, /adminBorderSpin|conic-gradient/);
   assert.match(css, /@keyframes adminGlow/);
 });

@@ -2,6 +2,7 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const { businessDate, isShiftCurrent } = require("./business-date");
 
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || "0.0.0.0";
@@ -34,7 +35,7 @@ function db() {
 }
 function save(data) { fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2)); }
 function id(prefix) { return `${prefix}_${Date.now()}_${crypto.randomBytes(3).toString("hex")}`; }
-function today() { return new Date().toISOString().slice(0, 10); }
+function today() { return businessDate(); }
 function now() { return new Date().toISOString(); }
 function minutes(t) { const [h,m] = String(t || "00:00").split(":").map(Number); return h*60+m; }
 function parseBody(req) { return new Promise((resolve,reject)=>{ let body=""; req.on("data",c=>body+=c); req.on("end",()=>{ if(!body)return resolve({}); try{resolve(JSON.parse(body));}catch{reject(new Error("JSON inválido"));} }); }); }
@@ -42,7 +43,7 @@ function send(res,status,payload,type="application/json"){res.writeHead(status,{
 function currentConsultant(data){const list=data.consultants.slice().sort((a,b)=>minutes(a.startTime)-minutes(b.startTime));const n=new Date(),current=n.getHours()*60+n.getMinutes();let selected=list[0]||null;for(const c of list)if(minutes(c.startTime)<=current)selected=c;return selected;}
 function activityCounts(data, consultantId, date){const counts={};for(const a of data.activities.filter(a=>a.date===date&&a.consultantId===consultantId))counts[a.type]=(counts[a.type]||0)+1;return counts;}
 function stats(data, consultantId, date){const msgs=data.messages.filter(m=>m.date===date&&m.consultantId===consultantId);const acts=activityCounts(data,consultantId,date);return{messages:msgs.length,goal:(data.consultants.find(c=>c.id===consultantId)||{}).dailyGoal||0,activities:acts};}
-function openShift(data,consultantId){return data.shifts.find(s=>s.consultantId===consultantId&&s.date===today()&&!s.endedAt)||null;}
+function openShift(data,consultantId){const consultant=data.consultants.find(c=>c.id===consultantId);return data.shifts.find(s=>s.consultantId===consultantId&&isShiftCurrent(s,consultant?.startTime))||null;}
 function belongsToShift(item,shift,timeField){
   if(item.shiftId&&item.shiftId!==shift.id)return false;
   const timestamp=item[timeField];
@@ -66,7 +67,7 @@ async function route(req,res){
   try{
     if(pathname==="/api/bootstrap"&&method==="GET"){
       const current=currentConsultant(data);
-      return send(res,200,{consultants:data.consultants.slice().sort((a,b)=>minutes(a.startTime)-minutes(b.startTime)),currentConsultant:current,activeShift:current?data.shifts.find(s=>s.consultantId===current.id&&s.date===today()&&!s.endedAt):null,activeShifts:data.shifts.filter(s=>s.date===today()&&!s.endedAt).map(s=>s.consultantId),totals:{allMessages:data.messages.length,todayMessages:data.messages.filter(m=>m.date===today()).length}});
+      return send(res,200,{consultants:data.consultants.slice().sort((a,b)=>minutes(a.startTime)-minutes(b.startTime)),currentConsultant:current,activeShift:current?openShift(data,current.id):null,activeShifts:data.consultants.filter(c=>openShift(data,c.id)).map(c=>c.id),totals:{allMessages:data.messages.length,todayMessages:data.messages.filter(m=>m.date===today()).length}});
     }
 
     if(pathname==="/api/consultants"&&method==="POST"){
@@ -94,7 +95,7 @@ async function route(req,res){
       const index=data.messages.findLastIndex(m=>m.consultantId===consultantId&&m.date===date&&shift&&belongsToShift(m,shift,"sentAt"));if(index===-1)return send(res,200,{ok:true,removed:false});const removed=data.messages.splice(index,1)[0];save(data);return send(res,200,{ok:true,removed:true,id:removed.id});
     }
     if(pathname==="/api/webhooks/whatsapp"&&method==="POST"){
-      const b=await parseBody(req),consultantId=b.consultantId||currentConsultant(data)?.id;if(!consultantId)return send(res,400,{error:"Não foi possível determinar o consultor."});const exists=b.externalId&&data.messages.some(m=>m.externalId===b.externalId),shift=openShift(data,consultantId),sentAt=b.sentAt||now(),draft={sentAt};if(!exists){data.messages.push({id:id("m"),consultantId,date:sentAt.slice(0,10),sentAt,source:"whatsapp",externalId:b.externalId||null,shiftId:shift&&belongsToShift(draft,shift,"sentAt")?shift.id:null});save(data);}return send(res,200,{ok:true});
+      const b=await parseBody(req),consultantId=b.consultantId||currentConsultant(data)?.id;if(!consultantId)return send(res,400,{error:"Não foi possível determinar o consultor."});const exists=b.externalId&&data.messages.some(m=>m.externalId===b.externalId),shift=openShift(data,consultantId),sentAt=b.sentAt||now(),draft={sentAt};if(!exists){data.messages.push({id:id("m"),consultantId,date:businessDate(sentAt),sentAt,source:"whatsapp",externalId:b.externalId||null,shiftId:shift&&belongsToShift(draft,shift,"sentAt")?shift.id:null});save(data);}return send(res,200,{ok:true});
     }
     if(pathname==="/api/activities/adjust"&&method==="POST"){
       const b=await parseBody(req),consultantId=b.consultantId,type=b.type,delta=Number(b.delta),date=b.date||today();if(!consultantId||!type||![-1,1].includes(delta))return send(res,400,{error:"Consultor, atividade e ajuste (+1/-1) são obrigatórios."});
@@ -114,13 +115,13 @@ async function route(req,res){
     if(pathname.startsWith("/api/consultants/")&&pathname.endsWith("/delete-day")&&method==="POST"){const parts=pathname.split("/"),cid=parts[3],b=await parseBody(req),date=b.date||today();if(!canManage(data,b.requesterId,cid))return send(res,403,{error:"Acesso negado."});data.messages=data.messages.filter(m=>!(m.consultantId===cid&&m.date===date));data.activities=data.activities.filter(a=>!(a.consultantId===cid&&a.date===date));data.shifts=data.shifts.filter(s=>!(s.consultantId===cid&&s.date===date));data.cancellationPendings=data.cancellationPendings.filter(p=>!(p.consultantId===cid&&p.date===date));save(data);return send(res,200,{ok:true,date});}
     if(pathname.startsWith("/api/consultants/")&&pathname.endsWith("/delete-all")&&method==="POST"){const parts=pathname.split("/"),cid=parts[3],b=await parseBody(req);if(!canManage(data,b.requesterId,cid))return send(res,403,{error:"Acesso negado."});data.messages=data.messages.filter(m=>m.consultantId!==cid);data.activities=data.activities.filter(a=>a.consultantId!==cid);data.shifts=data.shifts.filter(s=>s.consultantId!==cid);data.cancellationPendings=data.cancellationPendings.filter(p=>p.consultantId!==cid);save(data);return send(res,200,{ok:true});}
 
-    if(pathname==="/api/session"&&method==="GET"){const cid=url.searchParams.get("consultantId"),c=data.consultants.find(x=>x.id===cid);if(!c)return send(res,404,{error:"Consultor não encontrado."});return send(res,200,{consultant:c,shift:data.shifts.find(s=>s.consultantId===cid&&s.date===today()&&!s.endedAt)||null});}
+    if(pathname==="/api/session"&&method==="GET"){const cid=url.searchParams.get("consultantId"),c=data.consultants.find(x=>x.id===cid);if(!c)return send(res,404,{error:"Consultor não encontrado."});return send(res,200,{consultant:c,shift:openShift(data,cid)});}
     if(pathname==="/api/session-stats"&&method==="GET"){const cid=url.searchParams.get("consultantId"),shift=openShift(data,cid);if(!data.consultants.some(c=>c.id===cid))return send(res,404,{error:"Consultor não encontrado."});return send(res,200,shiftStats(data,shift));}
     if(pathname==="/api/stats"&&method==="GET"){
       const date=url.searchParams.get("date")||today(),rows=data.consultants.map(c=>{const s=stats(data,c.id,date),all=data.messages.filter(m=>m.consultantId===c.id),days=new Set(all.map(m=>m.date)).size;return {...c,...s,average:days?Math.round(all.length/days):0};});
       return send(res,200,{date,totalMessages:data.messages.filter(m=>m.date===date).length,allMessages:data.messages.length,rows});
     }
-    if(pathname==="/api/history"&&method==="GET"){const limit=Math.min(Number(url.searchParams.get("limit")||100),500);return send(res,200,data.shifts.slice().sort((a,b)=>String(b.endedAt||b.startedAt||"").localeCompare(String(a.endedAt||a.startedAt||""))).slice(0,limit).map(s=>{const c=data.consultants.find(x=>x.id===s.consultantId),st=s.reportStats||shiftStats(data,s);return {...s,consultantName:c?.name||"—",stats:st};}));}
+    if(pathname==="/api/history"&&method==="GET"){const limit=Math.min(Number(url.searchParams.get("limit")||100),500);return send(res,200,data.shifts.slice().sort((a,b)=>String(b.endedAt||b.startedAt||"").localeCompare(String(a.endedAt||a.startedAt||""))).slice(0,limit).map(s=>{const c=data.consultants.find(x=>x.id===s.consultantId),st=s.reportStats||shiftStats(data,s);return {...s,consultantName:c?.name||"—",stats:st,isCurrent:isShiftCurrent(s,c?.startTime)};}));}
 
     let file=pathname==="/"?"/index.html":pathname;const safe=path.normalize(file).replace(/^(\.\.[\/\\])+/,"");const full=path.join(PUBLIC_DIR,safe);if(fs.existsSync(full)&&fs.statSync(full).isFile()){const ext=path.extname(full),types={".html":"text/html",".css":"text/css",".js":"text/javascript",".json":"application/json",".svg":"image/svg+xml"};return send(res,200,fs.readFileSync(full),types[ext]||"application/octet-stream");}
     return send(res,404,{error:"Rota não encontrada."});
