@@ -337,6 +337,26 @@ test('tipos de cobrança recebem três tons visuais distintos', () => {
   backgrounds.forEach(background => assert.match(background, /^#/));
 });
 
+test('controles de cobrança ficam junto ao cabeçalho sem o espaço herdado', () => {
+  const stylesheet = fs.readFileSync(path.join(projectRoot, 'public/activity-ui.css'), 'utf8');
+  const chargeCard = cssLastRule(stylesheet, '.charge-group-card');
+  assert.equal(chargeCard.gap, '0');
+  assert.equal(chargeCard['justify-content'], 'flex-start');
+});
+
+test('mensagens, matrículas e cobranças usam a nova paleta também no gráfico', () => {
+  const stylesheet = fs.readFileSync(path.join(projectRoot, 'public/activity-ui.css'), 'utf8');
+  assert.equal(cssLastRule(stylesheet, '.activity-icon.messages').color, '#2563eb');
+  assert.equal(cssLastRule(stylesheet, '.activity-icon.matriculas').color, '#7c3aed');
+  assert.equal(cssLastRule(stylesheet, '.charge-inadimplentes')['border-left'], '3px solid #718096');
+  assert.equal(cssLastRule(stylesheet, '.charge-manuais')['border-left'], '3px solid #34a853');
+  assert.equal(cssLastRule(stylesheet, '.charge-efetivadas')['border-left'], '3px solid #0f7a4a');
+
+  const markup = renderActivityMarkup({ inadimplentes: 2, manuais: 3, efetivadas: 4 });
+  ['#2563eb', '#7c3aed', '#718096', '#34a853', '#0f7a4a']
+    .forEach(color => assert.match(markup, new RegExp(color)));
+});
+
 test('colunas comuns, especiais e gráfico terminam com a mesma altura', () => {
   const stylesheet = fs.readFileSync(path.join(projectRoot, 'public/activity-ui.css'), 'utf8');
   const regular = cssLastRule(stylesheet, '.activity-btn-round');
@@ -356,9 +376,9 @@ test('gráfico separa os três tipos de cobrança com as mesmas cores visuais', 
   assert.match(markup, /<span>Inadimplentes<\/span><strong>2<\/strong>/);
   assert.match(markup, /<span>Cobranças manuais<\/span><strong>3<\/strong>/);
   assert.match(markup, /<span>Cobranças efetivadas<\/span><strong>4<\/strong>/);
-  assert.match(markup, /#f6c453/);
-  assert.match(markup, /#f59e0b/);
-  assert.match(markup, /#e8790b/);
+  assert.match(markup, /#718096/);
+  assert.match(markup, /#34a853/);
+  assert.match(markup, /#0f7a4a/);
   assert.doesNotMatch(markup, /<span>Cobranças<\/span><strong>9<\/strong>/);
 });
 
