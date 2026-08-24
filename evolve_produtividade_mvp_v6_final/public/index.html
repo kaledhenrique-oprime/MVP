@@ -39,8 +39,18 @@
       </section>
 
       <section id="activitySection" class="card activity-card">
-        <div class="section-title"><div class="activity-title-actions"><h2>Registrar atividade</h2><button class="crm-shortcut" onclick="openCrm()">▦ CRM’s</button></div><span class="muted">clique nos botões para registrar</span></div>
-        <div id="activityButtons" class="activity-workspace"></div>
+        <div class="section-title"><div class="activity-title-actions"><button id="activityTabButton" class="activity-panel-tab active" onclick="showActivityTab()">Registrar atividade</button><button id="crmTabButton" class="activity-panel-tab" onclick="openCrm()">▦ CRM’s</button></div><span id="activityTabHint" class="muted">clique nos botões para registrar</span></div>
+        <div id="activityTabContent"><div id="activityButtons" class="activity-workspace"></div></div>
+        <div id="crmTabContent" class="crm-card-inline hidden">
+          <div class="crm-inline-header"><div><h2>CRM’s</h2><span class="muted">Acompanhamentos compartilhados da equipe</span></div><button class="primary" onclick="openCrmForm()">+ Novo registro</button></div>
+          <div class="crm-filters">
+            <label>Consultor<select id="crmConsultantFilter" onchange="renderCrmRows()"><option value="">Todos</option></select></label>
+            <label>Prioridade<select id="crmPriorityFilter" onchange="renderCrmRows()"><option value="">Todas</option><option value="none">Sem prioridade</option><option value="when_possible">Quando possível</option><option value="important">Importante</option><option value="urgent">Urgente</option></select></label>
+            <label>Status<select id="crmStatusFilter" onchange="renderCrmRows()"><option value="">Todos</option><option value="pending">Pendente</option><option value="follow_up">Acompanhar</option><option value="done">Feito</option></select></label>
+          </div>
+          <div class="crm-table-wrap"><table class="crm-table"><thead><tr><th>Concluído</th><th>Data</th><th>Consultor</th><th>Matrícula/ID</th><th>Nome do cliente</th><th>Prioridade</th><th>Assunto</th><th>Detalhes do CRM</th><th>Acompanhamento</th><th>Status</th><th>Ações</th></tr></thead><tbody id="crmTableBody"></tbody></table></div>
+          <div id="crmEmpty" class="crm-empty hidden">Nenhum registro encontrado.</div>
+        </div>
       </section>
 
       <section id="teamSection" class="card team-card">
@@ -48,17 +58,6 @@
         <div class="table-wrap"><table><thead><tr id="teamHead"></tr></thead><tbody id="teamBody"></tbody></table></div>
       </section>
 
-      <section id="crmSection" class="card crm-card hidden">
-        <div class="section-title"><div><h2>CRM’s</h2><span class="muted">Acompanhamentos compartilhados da equipe</span></div><button class="primary" onclick="openCrmForm()">+ Novo registro</button></div>
-        <div class="crm-filters">
-          <label>Consultor<select id="crmConsultantFilter" onchange="renderCrmRows()"><option value="">Todos</option></select></label>
-          <label>Prioridade<select id="crmPriorityFilter" onchange="renderCrmRows()"><option value="">Todas</option><option value="none">Sem prioridade</option><option value="when_possible">Quando possível</option><option value="important">Importante</option><option value="urgent">Urgente</option></select></label>
-          <label>Status<select id="crmStatusFilter" onchange="renderCrmRows()"><option value="">Todos</option><option value="pending">Pendente</option><option value="follow_up">Acompanhar</option><option value="done">Feito</option></select></label>
-          <button class="secondary" onclick="closeCrm()">Fechar</button>
-        </div>
-        <div class="crm-table-wrap"><table class="crm-table"><thead><tr><th>Concluído</th><th>Data</th><th>Consultor</th><th>Matrícula/ID</th><th>Nome do cliente</th><th>Prioridade</th><th>Assunto</th><th>Detalhes do CRM</th><th>Acompanhamento</th><th>Status</th><th>Ações</th></tr></thead><tbody id="crmTableBody"></tbody></table></div>
-        <div id="crmEmpty" class="crm-empty hidden">Nenhum registro encontrado.</div>
-      </section>
     </main>
   </div>
 </div>
