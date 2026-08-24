@@ -25,7 +25,7 @@
       ${warning?`<button class="warning-btn" title="Ver pendências" onclick="openCancellationPending()">⚠</button>`:""}
       <div class="activity-top">
         <div class="activity-icon ${ICON_CLASS[type]}">${ICONS[type]}</div>
-        <div class="activity-info"><strong>${label}</strong></div>
+        <div class="activity-info"><strong>${label}</strong><small class="activity-description">${DESCRIPTIONS[type]}</small></div>
       </div>
       <div class="activity-control-row">${compactCounter(type,count)}</div>
     </div>`;
@@ -42,7 +42,7 @@
     return `<div class="activity-btn charge-group-card">
       <div class="activity-top">
         <div class="activity-icon cobrancas">$</div>
-        <div class="activity-info"><strong>Cobranças</strong></div>
+        <div class="activity-info"><strong>Cobranças</strong><small class="activity-description">Acompanhe os contatos e pagamentos.</small></div>
       </div>
       <div class="charge-list">${rows}</div>
     </div>`;
@@ -52,13 +52,13 @@
     return `<div class="finish-grid-card">
       <button class="finish-grid-btn" onclick="finishShift()">
         <span class="finish-grid-icon">✓</span>
-        <span><strong>Finalizar expediente</strong></span>
+        <span><strong>Finalizar expediente</strong><small class="activity-description">Salvar relatório no histórico.</small></span>
       </button>
     </div>`;
   }
 
   window.renderActivities=function(){
-    const me=state.stats?.rows?.find(x=>x.id===state.consultant.id);
+    const me=state.sessionStats||state.stats?.rows?.find(x=>x.id===state.consultant.id);
     const pending=hasCancellationPending();
     const html=[
       regularCard("mensagens","Mensagens",me,pending),

@@ -73,9 +73,9 @@ function renderActivityMarkup() {
       agendamentos: 'agendamentos', visitas: 'visitas', nps: 'nps'
     },
     DESCRIPTIONS: {
-      mensagens: 'legenda antiga', matriculas: 'legenda antiga',
-      cancelamentos: 'legenda antiga', agendamentos: 'legenda antiga',
-      visitas: 'legenda antiga', nps: 'legenda antiga'
+      mensagens: 'Conversas enviadas no atendimento.', matriculas: 'Novos contratos concluídos.',
+      cancelamentos: 'Solicitações concluídas no turno.', agendamentos: 'Treinos marcados para alunos.',
+      visitas: 'Pessoas recebidas na unidade.', nps: 'Avaliações de satisfação coletadas.'
     }
   });
   context.window = context;
@@ -149,9 +149,11 @@ test('a página do consultor incorpora sem alterações o PNG com texto preto e 
   assert.ok(red > 1000, 'o símbolo deve ser vermelho');
 });
 
-test('os cartões renderizados não exibem as legendas antigas', () => {
+test('os cartões renderizados exibem descrições curtas e úteis', () => {
   const markup = renderActivityMarkup();
-  assert.doesNotMatch(markup, /<small>/);
+  assert.match(markup, /class="activity-description"/);
+  assert.match(markup, /Conversas enviadas no atendimento/);
+  assert.doesNotMatch(markup, /Adicione \+1 sempre que/);
   assert.match(markup, />Mensagens</);
   assert.match(markup, />Cobranças</);
   assert.match(markup, />Finalizar expediente</);
@@ -162,11 +164,13 @@ test('os cartões têm controles próximos e conteúdo com espaço seguro', () =
   const counter = cssRule(stylesheet, '.compact-counter');
   const cards = cssRule(stylesheet, '.activity-btn-round');
   const charges = cssRule(stylesheet, '.charge-group-card');
+  const chargeHeader = cssRule(stylesheet, '.charge-group-card .activity-top');
 
   assert.equal(counter.width, 'max-content');
   assert.ok(Number.parseFloat(counter.gap) <= 5);
-  assert.ok(Number.parseFloat(cards['min-height']) >= 170);
-  assert.ok(Number.parseFloat(charges.height) >= 170);
+  assert.ok(Number.parseFloat(cards['min-height']) >= 188);
+  assert.ok(Number.parseFloat(charges.height) >= 188);
+  assert.ok(Number.parseFloat(chargeHeader['min-height']) >= 48);
   assert.notEqual(charges.overflow, 'hidden');
 });
 
