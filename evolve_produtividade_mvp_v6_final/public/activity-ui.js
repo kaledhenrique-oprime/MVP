@@ -25,7 +25,7 @@
       ${warning?`<button class="warning-btn" title="Ver pendências" onclick="openCancellationPending()">⚠</button>`:""}
       <div class="activity-top">
         <div class="activity-icon ${ICON_CLASS[type]}">${ICONS[type]}</div>
-        <div class="activity-info"><strong>${DESCRIPTIONS[type]?label:""}</strong><small>${DESCRIPTIONS[type]}</small></div>
+        <div class="activity-info"><strong>${label}</strong></div>
       </div>
       <div class="activity-control-row">${compactCounter(type,count)}</div>
     </div>`;
@@ -42,7 +42,7 @@
     return `<div class="activity-btn charge-group-card">
       <div class="activity-top">
         <div class="activity-icon cobrancas">$</div>
-        <div class="activity-info"><strong>Cobranças</strong><small>Registre cada cobrança realizada.</small></div>
+        <div class="activity-info"><strong>Cobranças</strong></div>
       </div>
       <div class="charge-list">${rows}</div>
     </div>`;
@@ -52,7 +52,7 @@
     return `<div class="finish-grid-card">
       <button class="finish-grid-btn" onclick="finishShift()">
         <span class="finish-grid-icon">✓</span>
-        <span><strong>Finalizar expediente</strong><small>Registrar e fechar o expediente</small></span>
+        <span><strong>Finalizar expediente</strong></span>
       </button>
     </div>`;
   }
