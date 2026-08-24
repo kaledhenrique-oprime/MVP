@@ -39,7 +39,7 @@ function cssRule(stylesheet, selector) {
 
 function cssLastRule(stylesheet, selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const matches = [...stylesheet.matchAll(new RegExp(`(?:^|})${escaped}\\{([^}]*)\\}`, 'g'))];
+  const matches = [...stylesheet.matchAll(new RegExp(`(?:^|})\\s*${escaped}\\{([^}]*)\\}`, 'g'))];
   const match = matches.at(-1);
   assert.ok(match, `regra CSS ausente: ${selector}`);
   return Object.fromEntries(match[1].split(';').filter(Boolean).map(entry => {
@@ -64,6 +64,28 @@ function createFakeDom() {
     return elements.get(id);
   };
   return { elements, document: { getElementById: get } };
+}
+
+function createTabbedDom() {
+  const elements = new Map();
+  const get = id => {
+    if (!elements.has(id)) {
+      const classes = new Set(['hidden']);
+      elements.set(id, {
+        id, innerHTML: '', textContent: '', value: '', checked: false, disabled: false,
+        style: {},
+        classList: {
+          add(...names) { names.forEach(name => classes.add(name)); },
+          remove(...names) { names.forEach(name => classes.delete(name)); },
+          toggle(name, force) { if (force === undefined ? !classes.has(name) : force) classes.add(name); else classes.delete(name); },
+          contains(name) { return classes.has(name); }
+        },
+        scrollIntoView() { this.scrolled = true; }
+      });
+    }
+    return elements.get(id);
+  };
+  return { elements, document: { getElementById: get, querySelectorAll: () => [] } };
 }
 
 function renderActivityMarkup() {
@@ -194,8 +216,9 @@ test('os cartões têm controles próximos e conteúdo com espaço seguro', () =
   assert.equal(counter.width, 'max-content');
   assert.ok(Number.parseFloat(counter.gap) <= 5);
   assert.ok(Number.parseFloat(cards['min-height']) <= 145);
-  assert.ok(Number.parseFloat(charges.height) <= 145);
-  assert.ok(Number.parseFloat(chargeHeader['min-height']) >= 38);
+  assert.equal(charges.height, '188px!important');
+  assert.equal(charges['min-height'], '188px');
+  assert.ok(Number.parseFloat(chargeHeader['min-height']) >= 48);
   assert.notEqual(charges.overflow, 'hidden');
 });
 
@@ -271,10 +294,40 @@ test('registro de atividades usa três colunas compactas, gráfico e atalho do C
   const activitySection = html.match(/<section id="activitySection"[\s\S]*?<\/section>/)?.[0] || '';
   assert.match(activitySection, /onclick="openCrm\(\)"/);
   assert.ok(activitySection.indexOf('Registrar atividade') < activitySection.indexOf('CRM’s'));
+  assert.match(activitySection, /id="activityTabContent"/);
+  assert.match(activitySection, /id="crmTabContent"/);
 
   const stylesheet = fs.readFileSync(path.join(projectRoot, 'public/activity-ui.css'), 'utf8');
   const cardsGrid = cssLastRule(stylesheet, '.activity-cards-grid');
   assert.match(cardsGrid['grid-template-columns'], /repeat\(3/);
+});
+
+test('Cobranças e timers preservam o tamanho original de 188px', () => {
+  const stylesheet = fs.readFileSync(path.join(projectRoot, 'public/activity-ui.css'), 'utf8');
+  const charges = cssLastRule(stylesheet, '.charge-group-card');
+  const finish = cssLastRule(stylesheet, '.finish-grid-card');
+  assert.equal(charges.height, '188px!important');
+  assert.equal(charges['min-height'], '188px');
+  assert.equal(finish.height, '188px');
+  assert.equal(finish['min-height'], '188px');
+});
+
+test('CRM abre como segunda aba no lugar das atividades e permite voltar', async () => {
+  const { elements, document } = createTabbedDom();
+  const context = vm.createContext({
+    document,
+    fetch: async url => ({ ok: true, json: async () => String(url).includes('/api/crm') ? [] : { consultants: [], activeShifts: [] } }),
+    setInterval() {}, setTimeout() {}, clearTimeout() {}, console, Intl, Date,
+    alert() {}, confirm: () => true, location: { reload() {} }, localStorage: { getItem() { return null; }, setItem() {} }
+  });
+  vm.runInContext(fs.readFileSync(path.join(projectRoot, 'public/app.js'), 'utf8'), context);
+  await vm.runInContext('openCrm()', context);
+  assert.equal(elements.get('activityTabContent').classList.contains('hidden'), true);
+  assert.equal(elements.get('crmTabContent').classList.contains('hidden'), false);
+  assert.equal(elements.get('crmSection')?.scrolled, undefined);
+  vm.runInContext('showActivityTab()', context);
+  assert.equal(elements.get('activityTabContent').classList.contains('hidden'), false);
+  assert.equal(elements.get('crmTabContent').classList.contains('hidden'), true);
 });
 
 test('configurações incluem limpeza total protegida para Kalled', () => {
