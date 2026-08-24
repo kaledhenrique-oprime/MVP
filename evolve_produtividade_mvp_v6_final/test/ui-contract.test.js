@@ -302,6 +302,41 @@ test('registro de atividades usa três colunas compactas, gráfico e atalho do C
   assert.match(cardsGrid['grid-template-columns'], /repeat\(3/);
 });
 
+test('cartões são empilhados em colunas independentes sem espaços de linhas maiores', () => {
+  const markup = renderActivityMarkup();
+  const first = markup.indexOf('data-activity-column="primary"');
+  const second = markup.indexOf('data-activity-column="secondary"');
+  const third = markup.indexOf('data-activity-column="special"');
+  assert.ok(first >= 0 && first < second && second < third);
+
+  const primary = markup.slice(first, second);
+  const secondary = markup.slice(second, third);
+  const special = markup.slice(third);
+  assert.ok(primary.indexOf('Mensagens') < primary.indexOf('Agendamentos de treino'));
+  assert.ok(primary.indexOf('Agendamentos de treino') < primary.indexOf('Visitas recebidas'));
+  assert.ok(secondary.indexOf('Matrículas') < secondary.indexOf('NPS'));
+  assert.ok(secondary.indexOf('NPS') < secondary.indexOf('Cancelamentos'));
+  assert.ok(special.indexOf('Cobranças') < special.indexOf('Finalizar expediente'));
+
+  const stylesheet = fs.readFileSync(path.join(projectRoot, 'public/activity-ui.css'), 'utf8');
+  const column = cssLastRule(stylesheet, '.activity-card-column');
+  assert.equal(column['flex-direction'], 'column');
+  assert.ok(Number.parseFloat(column.gap) <= 12);
+});
+
+test('tipos de cobrança recebem três tons visuais distintos', () => {
+  const markup = renderActivityMarkup();
+  assert.match(markup, /charge-row charge-inadimplentes/);
+  assert.match(markup, /charge-row charge-manuais/);
+  assert.match(markup, /charge-row charge-efetivadas/);
+
+  const stylesheet = fs.readFileSync(path.join(projectRoot, 'public/activity-ui.css'), 'utf8');
+  const backgrounds = ['.charge-inadimplentes', '.charge-manuais', '.charge-efetivadas']
+    .map(selector => cssLastRule(stylesheet, selector).background);
+  assert.equal(new Set(backgrounds).size, 3);
+  backgrounds.forEach(background => assert.match(background, /^#/));
+});
+
 test('Cobranças e timers preservam o tamanho original de 188px', () => {
   const stylesheet = fs.readFileSync(path.join(projectRoot, 'public/activity-ui.css'), 'utf8');
   const charges = cssLastRule(stylesheet, '.charge-group-card');
