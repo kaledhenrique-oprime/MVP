@@ -37,6 +37,17 @@ function cssRule(stylesheet, selector) {
   }));
 }
 
+function cssLastRule(stylesheet, selector) {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const matches = [...stylesheet.matchAll(new RegExp(`(?:^|})${escaped}\\{([^}]*)\\}`, 'g'))];
+  const match = matches.at(-1);
+  assert.ok(match, `regra CSS ausente: ${selector}`);
+  return Object.fromEntries(match[1].split(';').filter(Boolean).map(entry => {
+    const separator = entry.indexOf(':');
+    return [entry.slice(0, separator).trim(), entry.slice(separator + 1).trim()];
+  }));
+}
+
 function createFakeDom() {
   const elements = new Map();
   const get = id => {
@@ -227,4 +238,24 @@ test('a tabela usa Treino e não força rolagem horizontal', () => {
   assert.ok(Number.parseFloat(metricNumber['font-size']) >= 17);
   assert.ok(Number.parseFloat(consultantTotal['font-size']) >= 18);
   assert.ok(Number.parseFloat(totalRow['font-size']) >= 16);
+});
+
+test('a navegação inclui a planilha CRM com filtros e todas as colunas', () => {
+  assert.match(html, />CRM’s</);
+  for (const label of ['Concluído', 'Data', 'Consultor', 'Matrícula/ID', 'Nome do cliente', 'Prioridade', 'Assunto', 'Detalhes do CRM', 'Acompanhamento', 'Status']) assert.match(html, new RegExp(label.replace('/', '\\/')));
+  assert.match(html, /id="crmConsultantFilter"/);
+  assert.match(html, /id="crmPriorityFilter"/);
+  assert.match(html, /id="crmStatusFilter"/);
+  assert.match(html, /id="crmFormModal"/);
+});
+
+test('cartões usam controles maiores sem aumentar a altura da grade', () => {
+  const stylesheet = fs.readFileSync(path.join(projectRoot, 'public/activity-ui.css'), 'utf8');
+  const button = cssLastRule(stylesheet, '.counter-btn');
+  const value = cssLastRule(stylesheet, '.counter-value');
+  const card = cssRule(stylesheet, '.activity-btn-round');
+  assert.ok(Number.parseFloat(button.width) >= 44);
+  assert.ok(Number.parseFloat(button.height) >= 44);
+  assert.ok(Number.parseFloat(value['font-size']) >= 20);
+  assert.equal(card['min-height'], '188px');
 });

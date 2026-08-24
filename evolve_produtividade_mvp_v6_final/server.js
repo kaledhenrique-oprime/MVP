@@ -20,7 +20,7 @@ const DEFAULT_DB = {
     { id: "c3", name: "Consultor 3", startTime: "12:00", dailyGoal: 300, buttonColor: "#111827", backgroundColor: "#f4f6f8", photo: "" },
     { id: "c4", name: "Consultor 4", startTime: "14:00", dailyGoal: 300, buttonColor: "#111827", backgroundColor: "#f4f6f8", photo: "" },
     { id: "c5", name: "Consultor 5", startTime: "16:00", dailyGoal: 300, buttonColor: "#111827", backgroundColor: "#f4f6f8", photo: "" }
-  ], messages: [], activities: [], shifts: [], cancellationPendings: []
+  ], messages: [], activities: [], shifts: [], cancellationPendings: [], crmRecords: []
 };
 
 if (!fs.existsSync(DATA_FILE)) fs.writeFileSync(DATA_FILE, JSON.stringify(DEFAULT_DB, null, 2));
@@ -31,6 +31,7 @@ function db() {
   data.activities = data.activities || [];
   data.shifts = data.shifts || [];
   data.cancellationPendings = data.cancellationPendings || [];
+  data.crmRecords = data.crmRecords || [];
   return data;
 }
 function save(data) { fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2)); }
@@ -61,6 +62,8 @@ function shiftStats(data,shift){
 function isAdmin(consultantId){return consultantId===ADMIN_ID;}
 function hasActiveShift(data,consultantId){return Boolean(openShift(data,consultantId));}
 function canManage(data,requesterId,targetId){return hasActiveShift(data,requesterId)&&(requesterId===targetId||isAdmin(requesterId));}
+const CRM_PRIORITIES=new Set(["none","when_possible","important","urgent"]),CRM_STATUSES=new Set(["pending","follow_up","done"]);
+function normalizeCrmPayload(body,data,existing={}){const record={...existing,...body},priority=record.priority||"none",status=record.status||"pending";if(!/^\d{4}-\d{2}-\d{2}$/.test(record.date||"")||Number.isNaN(new Date(record.date+"T12:00:00").getTime()))throw new Error("Data inválida.");if(!data.consultants.some(c=>c.id===record.consultantId))throw new Error("Consultor inválido.");if(!String(record.clientName||"").trim()||!String(record.subject||"").trim())throw new Error("Cliente e assunto são obrigatórios.");if(!CRM_PRIORITIES.has(priority))throw new Error("Prioridade inválida.");if(!CRM_STATUSES.has(status))throw new Error("Status inválido.");const completed=body.completed===undefined?status==="done":Boolean(body.completed);return{...record,enrollmentId:String(record.enrollmentId||"").trim(),clientName:String(record.clientName).trim(),priority,subject:String(record.subject).trim(),details:String(record.details||"").trim(),followUp:String(record.followUp||"").trim(),completed,status:completed?"done":status==="done"?"pending":status};}
 
 async function route(req,res){
   const url=new URL(req.url,`http://${req.headers.host||"localhost"}`),pathname=url.pathname,method=req.method;let data=db();
@@ -68,6 +71,18 @@ async function route(req,res){
     if(pathname==="/api/bootstrap"&&method==="GET"){
       const current=currentConsultant(data);
       return send(res,200,{consultants:data.consultants.slice().sort((a,b)=>minutes(a.startTime)-minutes(b.startTime)),currentConsultant:current,activeShift:current?openShift(data,current.id):null,activeShifts:data.consultants.filter(c=>openShift(data,c.id)).map(c=>c.id),totals:{allMessages:data.messages.length,todayMessages:data.messages.filter(m=>m.date===today()).length}});
+    }
+
+    if(pathname==="/api/crm"&&method==="GET")return send(res,200,data.crmRecords.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))||String(b.createdAt).localeCompare(String(a.createdAt))));
+    if(pathname==="/api/crm"&&method==="POST"){
+      const b=await parseBody(req);let normalized;try{normalized=normalizeCrmPayload(b,data);}catch(error){return send(res,400,{error:error.message});}
+      const stamp=now(),record={id:id("crm"),...normalized,createdAt:stamp,updatedAt:stamp};data.crmRecords.push(record);save(data);return send(res,201,record);
+    }
+    if(pathname.startsWith("/api/crm/")&&method==="PATCH"){
+      const record=data.crmRecords.find(x=>x.id===pathname.split("/").pop());if(!record)return send(res,404,{error:"Registro de CRM não encontrado."});const b=await parseBody(req);let normalized;try{normalized=normalizeCrmPayload(b,data,record);}catch(error){return send(res,400,{error:error.message});}Object.assign(record,normalized,{updatedAt:now()});save(data);return send(res,200,record);
+    }
+    if(pathname.startsWith("/api/crm/")&&method==="DELETE"){
+      const recordId=pathname.split("/").pop(),index=data.crmRecords.findIndex(x=>x.id===recordId);if(index===-1)return send(res,404,{error:"Registro de CRM não encontrado."});const removed=data.crmRecords.splice(index,1)[0];save(data);return send(res,200,{ok:true,id:removed.id});
     }
 
     if(pathname==="/api/consultants"&&method==="POST"){
@@ -106,7 +121,7 @@ async function route(req,res){
     if(pathname==="/api/activities"&&method==="POST"){const b=await parseBody(req);if(!b.consultantId||!b.type)return send(res,400,{error:"Consultor e atividade são obrigatórios."});const shift=openShift(data,b.consultantId),a={id:id("a"),consultantId:b.consultantId,type:b.type,date:b.date||today(),createdAt:now(),shiftId:shift?.id||null};data.activities.push(a);save(data);return send(res,201,a);}
 
     if(pathname==="/api/shifts/start"&&method==="POST"){const b=await parseBody(req),c=data.consultants.find(x=>x.id===b.consultantId);if(!c)return send(res,400,{error:"Consultor inválido."});const open=openShift(data,b.consultantId);if(open)return send(res,200,open);const shift={id:id("s"),consultantId:b.consultantId,date:today(),startedAt:now(),endedAt:null};data.shifts.push(shift);save(data);return send(res,201,shift);}
-    if(pathname==="/api/shifts/end"&&method==="POST"){const b=await parseBody(req),shift=openShift(data,b.consultantId);if(!shift)return send(res,404,{error:"Não há expediente aberto para este consultor."});shift.endedAt=now();shift.reportStats=shiftStats(data,shift);save(data);const c=data.consultants.find(x=>x.id===b.consultantId);return send(res,200,{shift,consultant:c,stats:shift.reportStats});}
+    if(pathname==="/api/shifts/end"&&method==="POST"){const b=await parseBody(req),shift=openShift(data,b.consultantId);if(!shift)return send(res,404,{error:"Não há expediente aberto para este consultor."});shift.endedAt=now();shift.reportStats=shiftStats(data,shift);const persisted=b.persist!==false;if(!persisted)data.shifts=data.shifts.filter(s=>s.id!==shift.id);save(data);const c=data.consultants.find(x=>x.id===b.consultantId);return send(res,200,{shift,consultant:c,stats:shift.reportStats,persisted});}
 
     if(pathname==="/api/cancellations"&&method==="POST"){const b=await parseBody(req);if(!b.consultantId)return send(res,400,{error:"Consultor é obrigatório."});const items=Array.isArray(b.items)?b.items.map(x=>({id:String(x.id),label:String(x.label),done:Boolean(x.done)})).filter(x=>x.id&&x.label):[];const pending={id:id("cancel"),consultantId:b.consultantId,date:b.date||today(),createdAt:now(),items};data.cancellationPendings.push(pending);save(data);return send(res,201,pending);}
     if(pathname==="/api/cancellations/pending"&&method==="GET"){const consultantId=url.searchParams.get("consultantId"),date=url.searchParams.get("date")||today();return send(res,200,data.cancellationPendings.filter(p=>p.consultantId===consultantId&&p.date===date&&p.items.some(i=>!i.done)));}
@@ -121,7 +136,7 @@ async function route(req,res){
       const date=url.searchParams.get("date")||today(),rows=data.consultants.map(c=>{const s=stats(data,c.id,date),all=data.messages.filter(m=>m.consultantId===c.id),days=new Set(all.map(m=>m.date)).size;return {...c,...s,average:days?Math.round(all.length/days):0};});
       return send(res,200,{date,totalMessages:data.messages.filter(m=>m.date===date).length,allMessages:data.messages.length,rows});
     }
-    if(pathname==="/api/history"&&method==="GET"){const limit=Math.min(Number(url.searchParams.get("limit")||100),500);return send(res,200,data.shifts.slice().sort((a,b)=>String(b.endedAt||b.startedAt||"").localeCompare(String(a.endedAt||a.startedAt||""))).slice(0,limit).map(s=>{const c=data.consultants.find(x=>x.id===s.consultantId),st=s.reportStats||shiftStats(data,s);return {...s,consultantName:c?.name||"—",stats:st,isCurrent:isShiftCurrent(s,c?.startTime)};}));}
+    if(pathname==="/api/history"&&method==="GET"){const limit=Math.min(Number(url.searchParams.get("limit")||100),500);return send(res,200,data.shifts.slice().sort((a,b)=>String(b.endedAt||b.startedAt||"").localeCompare(String(a.endedAt||a.startedAt||""))).slice(0,limit).map(s=>{const c=data.consultants.find(x=>x.id===s.consultantId),st=s.reportStats||shiftStats(data,s);return {...s,consultantName:c?.name||"—",consultantPhoto:c?.photo||"",stats:st,isCurrent:isShiftCurrent(s,c?.startTime)};}));}
 
     let file=pathname==="/"?"/index.html":pathname;const safe=path.normalize(file).replace(/^(\.\.[\/\\])+/,"");const full=path.join(PUBLIC_DIR,safe);if(fs.existsSync(full)&&fs.statSync(full).isFile()){const ext=path.extname(full),types={".html":"text/html",".css":"text/css",".js":"text/javascript",".json":"application/json",".svg":"image/svg+xml"};return send(res,200,fs.readFileSync(full),types[ext]||"application/octet-stream");}
     return send(res,404,{error:"Rota não encontrada."});

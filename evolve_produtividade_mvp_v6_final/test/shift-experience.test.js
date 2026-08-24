@@ -97,7 +97,7 @@ before(async () => {
       !source.includes(`${path.sep}test${path.sep}`)
   });
   fs.writeFileSync(path.join(tempRoot, 'data/db.json'), JSON.stringify({
-    consultants: [{ id: 'c1', name: 'Kalled', startTime: '08:00', dailyGoal: 300, backgroundColor: '#f4f6f8', photo: '' }],
+    consultants: [{ id: 'c1', name: 'Kalled', startTime: '08:00', dailyGoal: 300, backgroundColor: '#f4f6f8', photo: 'data:image/png;base64,abc' }],
     messages: [
       { id: 'legacy-m1', consultantId: 'c1', date: '2026-08-20', sentAt: '2026-08-20T08:30:00.000Z' },
       { id: 'legacy-m2', consultantId: 'c1', date: '2026-08-20', sentAt: '2026-08-20T10:30:00.000Z' }
@@ -342,6 +342,14 @@ test('expedientes antigos do mesmo dia são reconstruídos por faixa de horário
   assert.deepEqual(second.stats.activities, { visitas: 1 });
 });
 
+test('o histórico fornece e renderiza a foto do consultor', async () => {
+  const history = await request('/api/history');
+  assert.equal(history[0].consultantPhoto, 'data:image/png;base64,abc');
+  const context = appContext();
+  const markup = vm.runInContext(`historyShiftHtml(${JSON.stringify({ consultantName: 'Kalled', consultantPhoto: 'data:image/png;base64,abc', date: '2026-08-24', startedAt: '2026-08-24T08:00:00Z', endedAt: null, stats: {} })})`, context);
+  assert.match(markup, /<img class="history-avatar"/);
+});
+
 test('finalizar um expediente preserva o relatório e zera a sessão seguinte', async () => {
   await request('/api/shifts/start', { method: 'POST', body: JSON.stringify({ consultantId: 'c1' }) });
   await request('/api/messages/adjust', { method: 'POST', body: JSON.stringify({ consultantId: 'c1', delta: 1 }) });
@@ -362,6 +370,31 @@ test('finalizar um expediente preserva o relatório e zera a sessão seguinte', 
   assert.equal(finished.stats.activities.matriculas, 1);
 });
 
+test('um expediente zerado pode terminar sem permanecer no histórico', async () => {
+  const started = await request('/api/shifts/start', { method: 'POST', body: JSON.stringify({ consultantId: 'c1' }) });
+  const ended = await request('/api/shifts/end', { method: 'POST', body: JSON.stringify({ consultantId: 'c1', persist: false }) });
+  assert.equal(ended.persisted, false);
+  assert.equal((await request('/api/history')).some(item => item.id === started.id), false);
+});
+
+test('um expediente zerado pode salvar o relatório no histórico', async () => {
+  const started = await request('/api/shifts/start', { method: 'POST', body: JSON.stringify({ consultantId: 'c1' }) });
+  const ended = await request('/api/shifts/end', { method: 'POST', body: JSON.stringify({ consultantId: 'c1', persist: true }) });
+  assert.equal(ended.persisted, true);
+  assert.equal((await request('/api/history')).some(item => item.id === started.id), true);
+});
+
+test('a seleção distingue sessão zerada e oferece finalizar o perfil ativo', () => {
+  const context = appContext();
+  assert.equal(vm.runInContext('sessionHasRecords({messages:0,activities:{}})', context), false);
+  assert.equal(vm.runInContext('sessionHasRecords({messages:0,activities:{visitas:1}})', context), true);
+  const markup = vm.runInContext(`consultantCardHtml({ id:'c1', name:'Kalled', startTime:'05:00', dailyGoal:20 }, true)`, context);
+  assert.match(markup, /Continuar expediente/);
+  assert.match(markup, /Finalizar expediente/);
+  assert.match(markup, /^<div class="consultant-btn/);
+  assert.doesNotMatch(markup, /<button class="consultant-btn/);
+});
+
 test('um webhook atrasado não entra nas métricas do expediente atual', async () => {
   await request('/api/webhooks/whatsapp', {
     method: 'POST',
@@ -378,6 +411,8 @@ test('rotas destrutivas exigem uma jornada ativa do solicitante', async () => {
     body: JSON.stringify({ date: '1999-01-01' })
   });
   assert.equal(denied.status, 403);
+
+  await request('/api/shifts/start', { method: 'POST', body: JSON.stringify({ consultantId: 'c1' }) });
 
   const allowed = await fetch(`${baseUrl}/api/consultants/c1/delete-day`, {
     method: 'POST',
