@@ -88,13 +88,13 @@ function createTabbedDom() {
   return { elements, document: { getElementById: get, querySelectorAll: () => [] } };
 }
 
-function renderActivityMarkup() {
+function renderActivityMarkup(activities = {}) {
   const { elements, document } = createFakeDom();
   const context = vm.createContext({
     document,
     state: {
       consultant: { id: 'c1' },
-      stats: { rows: [{ id: 'c1', messages: 3, activities: {} }] }
+      stats: { rows: [{ id: 'c1', messages: 3, activities }] }
     },
     hasCancellationPending: () => false,
     ICONS: {
@@ -335,6 +335,31 @@ test('tipos de cobrança recebem três tons visuais distintos', () => {
     .map(selector => cssLastRule(stylesheet, selector).background);
   assert.equal(new Set(backgrounds).size, 3);
   backgrounds.forEach(background => assert.match(background, /^#/));
+});
+
+test('colunas comuns, especiais e gráfico terminam com a mesma altura', () => {
+  const stylesheet = fs.readFileSync(path.join(projectRoot, 'public/activity-ui.css'), 'utf8');
+  const regular = cssLastRule(stylesheet, '.activity-btn-round');
+  const charge = cssLastRule(stylesheet, '.charge-group-card');
+  const finish = cssLastRule(stylesheet, '.finish-grid-card');
+  const column = cssLastRule(stylesheet, '.activity-card-column');
+  const regularHeight = Number.parseFloat(regular.height);
+  const specialHeight = Number.parseFloat(charge.height);
+  const gap = Number.parseFloat(column.gap);
+  assert.equal(regularHeight, 122);
+  assert.equal(Number.parseFloat(finish.height), specialHeight);
+  assert.equal(regularHeight * 3 + gap * 2, specialHeight * 2 + gap);
+});
+
+test('gráfico separa os três tipos de cobrança com as mesmas cores visuais', () => {
+  const markup = renderActivityMarkup({ inadimplentes: 2, manuais: 3, efetivadas: 4 });
+  assert.match(markup, /<span>Inadimplentes<\/span><strong>2<\/strong>/);
+  assert.match(markup, /<span>Cobranças manuais<\/span><strong>3<\/strong>/);
+  assert.match(markup, /<span>Cobranças efetivadas<\/span><strong>4<\/strong>/);
+  assert.match(markup, /#f6c453/);
+  assert.match(markup, /#f59e0b/);
+  assert.match(markup, /#e8790b/);
+  assert.doesNotMatch(markup, /<span>Cobranças<\/span><strong>9<\/strong>/);
 });
 
 test('Cobranças e timers preservam o tamanho original de 188px', () => {
