@@ -63,19 +63,45 @@
     </div>`;
   }
 
+  function activityChart(me){
+    const metrics=[
+      {label:"Mensagens",value:activityCount("mensagens",me),color:"#10b981"},
+      {label:"Vendas",value:activityCount("matriculas",me),color:"#22c55e"},
+      {label:"Cancelamentos",value:activityCount("cancelamentos",me),color:"#f97316"},
+      {label:"Cobranças",value:CHARGE_TYPES.reduce((sum,[type])=>sum+activityCount(type,me),0),color:"#f59e0b"},
+      {label:"Treinos",value:activityCount("agendamentos",me),color:"#3b82f6"},
+      {label:"Visitas",value:activityCount("visitas",me),color:"#8b5cf6"},
+      {label:"NPS",value:activityCount("nps",me),color:"#a855f7"}
+    ];
+    const total=metrics.reduce((sum,item)=>sum+item.value,0);
+    let cursor=0;
+    const segments=metrics.filter(item=>item.value>0).map(item=>{
+      const start=cursor;
+      cursor+=item.value/total*100;
+      return `${item.color} ${start}% ${cursor}%`;
+    });
+    const background=total?`conic-gradient(${segments.join(",")})`:"#eef2f5";
+    const legend=metrics.map(item=>`<div class="activity-chart-legend-item"><span class="chart-dot" style="background:${item.color}"></span><span>${item.label}</span><strong>${item.value}</strong></div>`).join("");
+    return `<aside class="activity-chart-card">
+      <div><span class="activity-chart-kicker">Resumo em tempo real</span><h3>Atividades do expediente</h3></div>
+      <div class="activity-donut" style="background:${background}"><div class="activity-donut-center"><strong>${total}</strong><span>Total</span></div></div>
+      ${total?`<div class="activity-chart-legend">${legend}</div>`:`<div class="activity-chart-empty">Nenhuma atividade registrada</div>`}
+    </aside>`;
+  }
+
   window.renderActivities=function(){
     const me=state.sessionStats||state.stats?.rows?.find(x=>x.id===state.consultant.id);
     const pending=hasCancellationPending();
-    const html=[
+    const cards=[
       regularCard("mensagens","Mensagens",me,pending),
       regularCard("matriculas","Matrículas",me,pending),
-      regularCard("cancelamentos","Cancelamentos",me,pending),
       renderChargeCard(me),
       regularCard("agendamentos","Agendamentos de treino",me,pending),
-      regularCard("visitas","Visitas recebidas",me,pending),
       regularCard("nps","NPS",me,pending),
-      finishCard()
+      finishCard(),
+      regularCard("visitas","Visitas recebidas",me,pending),
+      regularCard("cancelamentos","Cancelamentos",me,pending)
     ].join("");
-    document.getElementById("activityButtons").innerHTML=html;
+    document.getElementById("activityButtons").innerHTML=`<div class="activity-cards-grid">${cards}</div>${activityChart(me)}`;
   };
 })();
