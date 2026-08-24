@@ -57,3 +57,20 @@ test('CRM rejeita campos controlados e obrigatórios inválidos', async () => {
   ];
   for (const payload of invalidPayloads) assert.equal((await response('/api/crm', { method: 'POST', body: JSON.stringify(payload) })).status, 400);
 });
+
+test('Kalled pode limpar os dados de todos preservando os perfis', async () => {
+  await response('/api/shifts/start', { method: 'POST', body: JSON.stringify({ consultantId: 'c1' }) });
+  await response('/api/messages/adjust', { method: 'POST', body: JSON.stringify({ consultantId: 'c1', delta: 1 }) });
+  await response('/api/crm', { method: 'POST', body: JSON.stringify({ date: '2026-08-24', consultantId: 'c1', clientName: 'Cliente', subject: 'Assunto' }) });
+
+  const denied = await response('/api/admin/reset-database', { method: 'POST', body: JSON.stringify({ adminId: 'c2' }) });
+  assert.equal(denied.status, 403);
+  const reset = await response('/api/admin/reset-database', { method: 'POST', body: JSON.stringify({ adminId: 'c1' }) });
+  assert.equal(reset.status, 200);
+
+  const bootstrap = await response('/api/bootstrap');
+  assert.equal(bootstrap.body.consultants.length, 1);
+  assert.deepEqual((await response('/api/history')).body, []);
+  assert.deepEqual((await response('/api/crm')).body, []);
+  assert.equal(bootstrap.body.totals.allMessages, 0);
+});
