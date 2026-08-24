@@ -187,15 +187,15 @@ test('os timers ficam empilhados no quarto cartão da segunda linha', () => {
 test('os cartões têm controles próximos e conteúdo com espaço seguro', () => {
   const stylesheet = fs.readFileSync(path.join(projectRoot, 'public/activity-ui.css'), 'utf8');
   const counter = cssRule(stylesheet, '.compact-counter');
-  const cards = cssRule(stylesheet, '.activity-btn-round');
-  const charges = cssRule(stylesheet, '.charge-group-card');
-  const chargeHeader = cssRule(stylesheet, '.charge-group-card .activity-top');
+  const cards = cssLastRule(stylesheet, '.activity-btn-round');
+  const charges = cssLastRule(stylesheet, '.charge-group-card');
+  const chargeHeader = cssLastRule(stylesheet, '.charge-group-card .activity-top');
 
   assert.equal(counter.width, 'max-content');
   assert.ok(Number.parseFloat(counter.gap) <= 5);
-  assert.ok(Number.parseFloat(cards['min-height']) >= 188);
-  assert.ok(Number.parseFloat(charges.height) >= 188);
-  assert.ok(Number.parseFloat(chargeHeader['min-height']) >= 48);
+  assert.ok(Number.parseFloat(cards['min-height']) <= 145);
+  assert.ok(Number.parseFloat(charges.height) <= 145);
+  assert.ok(Number.parseFloat(chargeHeader['min-height']) >= 38);
   assert.notEqual(charges.overflow, 'hidden');
 });
 
@@ -249,13 +249,37 @@ test('a navegação inclui a planilha CRM com filtros e todas as colunas', () =>
   assert.match(html, /id="crmFormModal"/);
 });
 
-test('cartões usam controles maiores sem aumentar a altura da grade', () => {
+test('cartões usam controles compactos e bem alinhados', () => {
   const stylesheet = fs.readFileSync(path.join(projectRoot, 'public/activity-ui.css'), 'utf8');
   const button = cssLastRule(stylesheet, '.counter-btn');
   const value = cssLastRule(stylesheet, '.counter-value');
-  const card = cssRule(stylesheet, '.activity-btn-round');
-  assert.ok(Number.parseFloat(button.width) >= 44);
-  assert.ok(Number.parseFloat(button.height) >= 44);
-  assert.ok(Number.parseFloat(value['font-size']) >= 20);
-  assert.equal(card['min-height'], '188px');
+  const card = cssLastRule(stylesheet, '.activity-btn-round');
+  assert.ok(Number.parseFloat(button.width) >= 32 && Number.parseFloat(button.width) <= 38);
+  assert.ok(Number.parseFloat(button.height) >= 32 && Number.parseFloat(button.height) <= 38);
+  assert.ok(Number.parseFloat(value['font-size']) >= 15);
+  assert.ok(Number.parseFloat(card['min-height']) <= 145);
+});
+
+test('registro de atividades usa três colunas compactas, gráfico e atalho do CRM', () => {
+  const markup = renderActivityMarkup();
+  assert.match(markup, /class="activity-cards-grid"/);
+  assert.match(markup, /class="activity-chart-card"/);
+  assert.match(markup, /class="activity-donut"/);
+  assert.match(markup, /Mensagens/);
+  assert.match(markup, /Cobranças/);
+
+  const activitySection = html.match(/<section id="activitySection"[\s\S]*?<\/section>/)?.[0] || '';
+  assert.match(activitySection, /onclick="openCrm\(\)"/);
+  assert.ok(activitySection.indexOf('Registrar atividade') < activitySection.indexOf('CRM’s'));
+
+  const stylesheet = fs.readFileSync(path.join(projectRoot, 'public/activity-ui.css'), 'utf8');
+  const cardsGrid = cssLastRule(stylesheet, '.activity-cards-grid');
+  assert.match(cardsGrid['grid-template-columns'], /repeat\(3/);
+});
+
+test('configurações incluem limpeza total protegida para Kalled', () => {
+  assert.match(html, /id="resetDatabaseCard"/);
+  assert.match(html, /id="resetDatabaseModal"/);
+  assert.match(html, /Apagar banco de dados/);
+  assert.match(html, /preservados/);
 });
